@@ -196,7 +196,7 @@
                                     if (results[0]) {
                                         marker.lat = results[0].geometry.location.lat();
                                         marker.lng = results[0].geometry.location.lng();
-                                        marker.formatted_address = results[0].formatted_address;
+                                        marker.address = results[0].formatted_address;
                                     } else {
                                         marker.error = "Reverse Geocode was not successful for the following reason: No results found!";
                                     }

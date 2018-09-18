@@ -235,7 +235,7 @@
                 // Now for each waypoint
                 response.markerData.forEach(function(marker, index){
                     // Update it
-                    waypointAddresses[index] = marker.formatted_address;
+                    if (marker.address) waypointAddresses[index] = marker.address;
                 });
             }
         }
