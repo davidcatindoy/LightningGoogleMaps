@@ -1,0 +1,37 @@
+<!--
+- @author Tiaan Swart (tiaan@cloudinit.nz)
+- @date 2018-04-14
+- @description
+-
+- CHANGE LOG
+- 2018-08-19 - Initial setup
+-->
+<design:component >
+    <design:attribute name="title" label="Component Title"/>
+    <design:attribute name="icon" label="Component Icon"/>
+    <design:attribute name="mapHeight" label="Map Height"/>
+    <design:attribute name="recordNameField" label="Record Name Field"/>
+    <design:attribute name="recordDescriptionField" label="Record Description Field"/>
+    <design:attribute name="recordStreetField" label="Record Street Field"/>
+    <design:attribute name="recordSuburbField" label="Record Suburb Field"/>
+    <design:attribute name="recordCityField" label="Record City Field"/>
+    <design:attribute name="recordRegionField" label="Record Region Field"/>
+    <design:attribute name="recordCountryField" label="Record Country Field"/>
+    <design:attribute name="recordZipField" label="Record Zip Field"/>
+    <design:attribute name="recordLogoIconField" label="Record Logo Icon Field"/>
+    <design:attribute name="mapZoomControl" label="Map Zoom Control Enabled"/>
+    <design:attribute name="mapBoundsControl" label="Map Bounds Control Enabled"
+                      description="Map Zoom will be ignored if Map Bounds Control Enabled"/>
+    <design:attribute name="mapMapTypeControl" label="Map Type Control Enabled"/>
+    <design:attribute name="mapScaleControl" label="Map Scale Control Enabled"/>
+    <design:attribute name="mapStreetViewControl" label="Map Street View Control Enabled"/>
+    <design:attribute name="mapRotateControl" label="Map Rotate Control Enabled"/>
+    <design:attribute name="mapFullscreenControl" label="Map Full Screen Control Enabled"/>
+    <design:attribute name="autoCloseLastOpenedInfoWindow" label="Auto Close Last Opened Info Window"/>
+    <design:attribute name="calculateAndDisplayRouteEnabled" label="Calculate And Display Route Enabled"/>
+    <design:attribute name="mapZoom" label="Map Zoom" description="Allowed values: 1 to 16"/>
+    <design:attribute name="mapMapTypeIds" label="Map Type Ids"
+                      description="Allowed values: roadmap,satellite,hybrid,terrain (Comma seperated list)"/>
+    <design:attribute name="routeTravelMode" label="Route Travel Mode"
+                      description="Allowed values: DRIVING,WALKING,BICYCLING (Only one option)"/>
+</design:component>

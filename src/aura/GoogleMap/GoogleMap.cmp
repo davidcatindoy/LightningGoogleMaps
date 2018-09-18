@@ -1,0 +1,119 @@
+<!--
+- @author Tiaan Swart (tiaan@cloudinit.nz)
+- @date 2018-09-18
+- @description 
+-
+- CHANGE LOG
+- 2018-09-18 - Initial setup
+-->
+<aura:component description="GoogleMap" access="global" implements="force:hasRecordId,flexipage:availableForAllPageTypes" controller="GoogleMapUtil">
+
+    <!-- Aura Handlers -->
+    <aura:handler name="init" value="{!this}" action="{!c.doInit}"/>
+    <aura:handler event="aura:waiting" action="{!c.showWaiting}"/>
+    <aura:handler event="aura:doneWaiting" action="{!c.hideWaiting}"/>
+    <aura:handler name="change" value="{!v.vfGoogleMapURL}" action="{!c.doInit}"/>
+
+    <!-- Component Setup -->
+    <aura:attribute access="public" type="String" name="title" default="Google Map"/>
+    <aura:attribute access="public" type="String" name="icon" default="action:map"/>
+    <aura:attribute access="public" type="Integer" name="mapHeight" default="400"/>
+    <aura:attribute access="public" type="String" name="recordNameField"/>
+    <aura:attribute access="public" type="String" name="recordDescriptionField"/>
+    <aura:attribute access="public" type="String" name="recordStreetField"/>
+    <aura:attribute access="public" type="String" name="recordSuburbField"/>
+    <aura:attribute access="public" type="String" name="recordCityField"/>
+    <aura:attribute access="public" type="String" name="recordRegionField"/>
+    <aura:attribute access="public" type="String" name="recordCountryField"/>
+    <aura:attribute access="public" type="String" name="recordZipField"/>
+    <aura:attribute access="public" type="String" name="recordLogoIconField"/>
+
+    <!-- Component Variables -->
+    <aura:attribute access="private" type="Boolean" name="isDoneRendering" default="false"/>
+    <aura:attribute access="private" type="Boolean" name="isWaiting" default="true"/>
+    <aura:attribute access="private" type="Boolean" name="renderMap" default="false"/>
+    <aura:attribute access="private" type="String" name="vfGoogleMapURL" default="https://head-in-the-clouds-dev-ed--c.ap5.visual.force.com/apex/googlemap"/>
+
+    <!-- Map Controls -->
+    <aura:attribute access="public" type="Boolean" name="mapZoomControl" default="true"/>
+    <aura:attribute access="public" type="Boolean" name="mapBoundsControl" default="false"/>
+    <aura:attribute access="public" type="Boolean" name="mapMapTypeControl" default="true"/>
+    <aura:attribute access="public" type="Boolean" name="mapScaleControl" default="true"/>
+    <aura:attribute access="public" type="Boolean" name="mapStreetViewControl" default="true"/>
+    <aura:attribute access="public" type="Boolean" name="mapRotateControl" default="true"/>
+    <aura:attribute access="public" type="Boolean" name="mapFullscreenControl" default="true"/>
+    <aura:attribute access="public" type="Boolean" name="autoCloseLastOpenedInfoWindow" default="true"/>
+    <aura:attribute access="public" type="Boolean" name="calculateAndDisplayRouteEnabled" default="true"/>
+
+    <!-- Map Defaults -->
+    <aura:attribute access="public" type="Integer" name="mapZoom" default="14"/>
+    <aura:attribute access="public" type="String" name="mapMapTypeIds" default="roadmap,satellite"/>
+    <aura:attribute access="public" type="String" name="routeTravelMode" default="DRIVING"/>
+
+    <!-- Attributes used by Record Data -->
+    <aura:attribute access="public" type="String" name="recordId" />
+    <aura:attribute access="private" type="String[]" name="recordFieldNames" default="Id" required="true" />
+    <aura:attribute access="private" type="Object" name="record" />
+    <aura:attribute access="private" type="Object" name="simpleRecord" />
+    <aura:attribute access="private" type="String" name="recordError" />
+
+    <!-- Waypoints -->
+    <aura:attribute access="public" type="Boolean" default="false" name="waypointAddressesUpdated"/>
+    <aura:attribute access="public" type="List" default="[]" name="waypointAddresses"/>
+    <aura:handler name="change" value="{!v.waypointAddresses}" action="{!c.waypointAddressesChanged}"/>
+
+    <!-- Record Data - used to query the record -->
+    <force:recordData aura:id="recordLoader"
+                      recordId="{!v.recordId}"
+                      fields="{!v.recordFieldNames}"
+                      targetRecord="{!v.record}"
+                      targetFields="{!v.simpleRecord}"
+                      targetError="{!v.recordError}"
+                      recordUpdated="{!c.handleRecordUpdated}"
+                      mode="VIEW"/>
+
+    <lightning:card title="{!v.title}" iconName="{!v.icon}">
+        <aura:if isTrue="{!v.isWaiting}">
+            <lightning:spinner size="medium" variant="brand" alternativeText="Waiting..."/>
+        </aura:if>
+        <aura:set attribute="actions">
+            <aura:if isTrue="{!v.calculateAndDisplayRouteEnabled}">
+                <span onmouseover="{!c.displayAddressTooltip}" onmouseout="{!c.displayOutAddressTooltip}">
+                    <lightning:buttonIcon iconName="utility:add" variant="bare" alternativeText="Add Address" onclick="{!c.addWaypointAddress}"/>
+                </span>
+                <div class="slds-popover slds-popover--tooltip slds-nubbin--right-top slds-hidden tooltip-addAddress" role="tooltip" aura:id="tooltip-addAddress">
+                    <div class="slds-popover__body">Add an address to calculate and display routes to / from the address.</div>
+                </div>
+            </aura:if>
+            <span onmouseover="{!c.displayRefreshTooltip}" onmouseout="{!c.displayOutRefreshTooltip}">
+                <lightning:buttonIcon iconName="utility:refresh" variant="bare" alternativeText="Refresh" onclick="{!c.doInit}"/>
+            </span>
+            <div class="slds-popover slds-popover--tooltip slds-nubbin--right-top slds-hidden tooltip-refresh" role="tooltip" aura:id="tooltip-refresh">
+                <div class="slds-popover__body">Refresh the maps component and clear all custom addresses.</div>
+            </div>
+        </aura:set>
+        <aura:if isTrue="{!and(v.calculateAndDisplayRouteEnabled,not(empty(v.waypointAddresses)))}">
+            <aura:iteration items="{!v.waypointAddresses}" var="waypointAddress" indexVar="index">
+                <div class="waypointAddressContainer">
+                    <lightning:input label="{!'Address ' + (index + 1) + ':'}" value="{!waypointAddress}" class="slds-p-horizontal_small waypointAddressInput" onblur="{!c.waypointAddressChanged}" name="{!index}"/>
+                    <lightning:buttonIcon iconName="utility:delete" variant="bare" alternativeText="Remove Address" onclick="{!c.removeWaypointAddress}" value="{!index}"/>
+                </div>
+            </aura:iteration>
+            <br/>
+        </aura:if>
+        <p class="slds-p-horizontal_small">
+            <iframe aura:id="googleMapIframe"
+                    src="{!v.vfGoogleMapURL}"
+                    width="100%"
+                    height="{!if(v.renderMap,v.mapHeight,0)}"
+                    frameborder="0"
+                    onload="{!c.sendToMap}"/>
+        </p>
+        <aura:set attribute="footer">
+            <aura:if isTrue="{!and(v.calculateAndDisplayRouteEnabled,!empty(markerData))}">
+                <p>Route directions loading...</p>
+            </aura:if>
+        </aura:set>
+    </lightning:card>
+
+</aura:component>

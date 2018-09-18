@@ -1,0 +1,29 @@
+/**
+* @author Tiaan Swart (tiaan@cloudinit.nz)
+* @date 2018-08-19
+* @description 
+*
+* CHANGE LOG
+* 2018-08-19 - Initial setup
+**/
+.THIS .tooltip-addAddress {
+    position:absolute;
+    top:0px;
+    right:60px;
+}
+.THIS .tooltip-refresh {
+    position:absolute;
+    top:0px;
+    right:45px;
+}
+.THIS .waypointAddressContainer {
+    position: relative;
+}
+.THIS .waypointAddressContainer .waypointAddressInput {
+    max-width: 90%;
+}
+.THIS .waypointAddressContainer .slds-button {
+    position: absolute;
+    bottom: 8px;
+    right: 20px;
+}

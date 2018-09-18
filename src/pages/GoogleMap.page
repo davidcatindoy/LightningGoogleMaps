@@ -1,0 +1,370 @@
+<!--
+- @author Tiaan Swart (tiaan@cloudinit.nz)
+- @date 2018-09-18
+- @description 
+-
+- CHANGE LOG
+- 2018-09-18 - Initial setup
+--->
+<apex:page id="GoogleMap"
+           readOnly="true"
+           showHeader="false"
+           applyBodyTag="false"
+           applyHtmlTag="false"
+           docType="html-5.0"
+           standardStylesheets="false">
+<html lang="en" >
+    <head>
+        <meta charset="UTF-8"/>
+        <title>Google Maps</title>
+        <style>
+            html, body {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            #map {
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+            var gmConfig;
+            var key = 'AIzaSyDDs_ZzvqUadwekb3kflZXuTmc5wKqYGz4';
+
+            var map;
+            var mapMarkers;
+            var bounds;
+            var geocoder;
+            var lastOpenedInfoWindow;
+            var waypoints;
+            var promises;
+            var directionsService;
+            var directionsDisplay;
+
+            // Add an event listener for any messages posted to this page
+            window.addEventListener('message', function(event) {
+                // @TODO Secure here!!
+                gmConfig = event.data;
+                if (gmConfig.renderMap) {
+                    plotMarkers();
+                }
+            }, false);
+
+            document.addEventListener('DOMContentLoaded', function () {
+                if (document.querySelectorAll('#map').length > 0) {
+                    var js_file = document.createElement('script');
+                    js_file.type = 'text/javascript';
+                    js_file.src = `https://maps.googleapis.com/maps/api/js?key=${key}&callback=plotMarkers&signed_in=true`;
+                    document.getElementsByTagName('head')[0].appendChild(js_file);
+                }
+            });
+
+            var plotMarkers = function() {
+                if (gmConfig && gmConfig.renderMap && gmConfig.markerData) {
+                    map = null;
+                    mapMarkers = [];
+                    bounds = gmConfig.mapBoundsControl && gmConfig.markerData.length > 1 ? new google.maps.LatLngBounds() : null;
+                    geocoder = new google.maps.Geocoder();
+                    lastOpenedInfoWindow = null;
+                    waypoints = [];
+                    promises = [];
+                    directionsService = null;
+                    directionsDisplay = null;
+
+                    gmConfig.markerData.forEach(function (marker, index) {
+
+                        var geocodeAddressPromise = geocodeAddress(marker);
+                        promises.push(geocodeAddressPromise);
+                        geocodeAddressPromise.then(function (geocodedMarker) {
+                            marker = geocodedMarker;
+
+                            var reverseGeocodeLatLngPromise = reverseGeocodeLatLng(marker);
+                            promises.push(reverseGeocodeLatLngPromise);
+                            reverseGeocodeLatLngPromise.then(function (reverseGeocodedMarker) {
+                                marker = reverseGeocodedMarker;
+
+                                if (!map) {
+                                    initMap();
+                                }
+
+                                if (marker.lat && marker.lng) {
+                                    var position = new google.maps.LatLng(marker.lat, marker.lng);
+
+                                    var mapMarker = new google.maps.Marker({
+                                        position: position,
+                                        map: map,
+                                        animation: google.maps.Animation.DROP
+                                    });
+
+                                    mapMarker.addListener('click', function() {
+                                        map.setZoom(gmConfig.mapZoom);
+                                        map.setCenter(mapMarker.getPosition());
+                                    });
+
+                                    if (!gmConfig.calculateAndDisplayRouteEnabled || gmConfig.markerData.length === 1) {
+                                        mapMarkers.push(mapMarker);
+                                        addInfoWindow(mapMarker, marker);
+                                        // Weird behavior have to set the map center and zoom
+                                        if (gmConfig.markerData.length === 1) {
+                                            map.setZoom(gmConfig.mapZoom);
+                                            map.setCenter(mapMarker.getPosition());
+                                        }
+                                    }
+
+                                    if (gmConfig.mapBoundsControl && gmConfig.markerData.length > 1) {
+                                        bounds.extend(position);
+                                        map.fitBounds(bounds);
+                                    }
+                                }
+
+                                if (index != 0 && index != (gmConfig.markerData.length - 1) && gmConfig.calculateAndDisplayRouteEnabled
+                                        && gmConfig.markerData.length > 1) {
+                                    promises.push(addWaypoint(marker));
+                                }
+                            });
+
+                        });
+
+                    });
+
+                    if (gmConfig.calculateAndDisplayRouteEnabled && gmConfig.markerData.length > 1) {
+                        Promise.all(promises).then(function() {
+                            calculateAndDisplayRoute();
+                        });
+                    } else {
+                        sendToComponent({changeType:'LOADED',markerData:gmConfig.markerData});
+                    }
+                }
+            };
+
+            var geocodeAddress = function(marker) {
+                return new Promise(
+                    function (resolve) {
+                        if (!(marker.lat && marker.lng) && !marker.street) {
+                            marker.error = "Plotting marker was not successful for the following reason: No lat, long or address!";
+                            resolve(marker);
+                        } else if (!(marker.lat && marker.lng)) {
+                            if (!geocoder) {
+                                geocoder = new google.maps.Geocoder();
+                            }
+                            var theAddress = `${marker.street}${marker.suburb?', '+marker.suburb:''}`
+                                + `${marker.region?', '+marker.region:''}${marker.city?', '+marker.city:''}`
+                                + `${marker.country?', '+marker.country:''}${marker.zip?', '+marker.zip:''}`;
+                            geocoder.geocode({
+                                'address': theAddress
+                            }, function(results, status) {
+                                if (status == google.maps.GeocoderStatus.OK) {
+                                    if (status != google.maps.GeocoderStatus.ZERO_RESULTS) {
+                                        marker.lat = results[0].geometry.location.lat();
+                                        marker.lng = results[0].geometry.location.lng();
+                                        if (!marker.title) {
+                                            marker.title = theAddress;
+                                        }
+                                    } else {
+                                        marker.error = "Geocode was not successful for the following reason: No results found!";
+                                    }
+                                } else {
+                                    marker.error = "Geocode was not successful for the following reason: " + status;
+                                }
+                                resolve(marker);
+                            });
+                        } else {
+                            resolve(marker);
+                        }
+                    }
+                );
+            };
+
+            var reverseGeocodeLatLng = function(marker) {
+                return new Promise(
+                    function (resolve) {
+                        if (!(marker.lat && marker.lng)) {
+                            marker.error = "Reverse Geocode was not successful for the following reason: No lat long!";
+                            resolve(marker);
+                        } else {
+                            if (!geocoder) {
+                                geocoder = new google.maps.Geocoder();
+                            }
+                            var latlng = {lat: marker.lat, lng: marker.lng};
+                            geocoder.geocode({
+                                'location': latlng
+                            }, function(results, status) {
+                                if (status === 'OK') {
+                                    if (results[0]) {
+                                        marker.lat = results[0].geometry.location.lat();
+                                        marker.lng = results[0].geometry.location.lng();
+                                        marker.formatted_address = results[0].formatted_address;
+                                    } else {
+                                        marker.error = "Reverse Geocode was not successful for the following reason: No results found!";
+                                    }
+                                } else {
+                                    marker.error = "Reverse Geocode was not successful for the following reason: " + status;
+                                }
+                                resolve(marker);
+                            });
+                        }
+                    }
+                );
+            };
+
+            var addWaypoint = function(marker) {
+                return new Promise(
+                    function (resolve) {
+                        if (!marker.address) {
+                            marker.error = "Adding waypoint was not successful for the following reason: No address!";
+                            resolve(marker);
+                        } else {
+                            waypoints.push({
+                                location: marker.address,
+                                stopover: true
+                            });
+                            resolve(marker);
+                        }
+                    }
+                );
+            };
+
+            var calculateAndDisplayRoute = function() {
+                if (!directionsService) {
+                    initMap();
+                }
+
+                if (gmConfig.markerData[0].address && gmConfig.markerData.length > 1
+                    && gmConfig.markerData[gmConfig.markerData.length - 1].address && waypoints) {
+
+                    directionsService.route({
+                        origin: gmConfig.markerData[0].address,
+                        destination: gmConfig.markerData[gmConfig.markerData.length - 1].address,
+                        waypoints: waypoints,
+                        optimizeWaypoints: false,
+                        travelMode: gmConfig.routeTravelMode
+                    }, function(response, status) {
+
+                        if (status === 'OK') {
+                            directionsDisplay.setDirections(response);
+                            for (var i = 0; i < response.routes[0].legs.length; i++) {
+                                var leg = response.routes[0].legs[i];
+                                markerData[i + 1].route = {};
+                                markerData[i + 1].route.distance = leg.distance;
+                                markerData[i + 1].route.duration = leg.duration;
+                                markerData[i + 1].route.steps = [];
+                                for (var ii = 0; ii < leg.steps.length; ii++) {
+                                    var legStep = leg.steps[ii];
+                                    var step = {};
+                                    step.distance = legStep.distance;
+                                    step.duration = legStep.duration;
+                                    step.maneuver = legStep.maneuver;
+                                    step.travel_mode = legStep.travel_mode;
+                                    step.start_location = {};
+                                    step.start_location.lat = legStep.start_location.lat();
+                                    step.start_location.lng = legStep.start_location.lng();
+                                    step.end_location = {};
+                                    step.end_location.lat = legStep.end_location.lat();
+                                    step.end_location.lng = legStep.end_location.lng();
+                                    markerData[i + 1].route.steps.push(step);
+                                }
+                            }
+                        } else {
+                            window.alert('Directions request failed due to ' + status);
+                        }
+
+                        sendToComponent({changeType:'LOADED',markerData:gmConfig.markerData});
+                    });
+
+                } else {
+
+                    sendToComponent({changeType:'LOADED',markerData:gmConfig.markerData});
+                }
+            };
+
+            var addInfoWindow = function(mapMarker, marker) {
+                if (!marker.title && marker.address) {
+                    marker.title = marker.address;
+                } else if (!marker.description && marker.address && marker.title != marker.address) {
+                    marker.description = marker.address;
+                }
+
+                if (marker.title) {
+                    var contentString = '<div id="content">'+
+                        '<div id="siteNotice"></div>'+
+                        '<p>'+
+                        `${marker.logo ? '<img src='+marker.logo+' width=100 height=auto /><br/><br/>' : ''}`+
+                        `<strong>${marker.title}</strong>`+
+                        `${marker.description ? '<br/><br/>' + marker.description : ''}`+
+                        '<p>'+
+                        '</div>';
+                    var infowindow = new google.maps.InfoWindow({
+                        content: contentString,
+                        maxWidth: 200
+                    });
+                    mapMarker.addListener('click', function() {
+                        if (lastOpenedInfoWindow && gmConfig.autoCloseLastOpenedInfoWindow) {
+                            lastOpenedInfoWindow.close();
+                        }
+                        lastOpenedInfoWindow = infowindow;
+                        lastOpenedInfoWindow.open(map, mapMarker);
+                    });
+                }
+            };
+
+            var initMap = function() {
+                if (gmConfig.markerData) {
+
+                    if (gmConfig.mapMapTypeControl) {
+                        validateMapTypeIds();
+                    }
+
+                    map = new google.maps.Map(document.getElementById('map'), {
+                        zoom: gmConfig.mapZoom,
+                        zoomControl: gmConfig.mapZoomControl,
+                        mapTypeControl: gmConfig.mapMapTypeControl,
+                        mapTypeControlOptions: {
+                            style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
+                            mapTypeIds: gmConfig.mapMapTypeIds
+                        },
+                        scaleControl: gmConfig.mapScaleControl,
+                        streetViewControl: gmConfig.mapStreetViewControl,
+                        rotateControl: gmConfig.mapRotateControl,
+                        fullscreenControl: gmConfig.mapFullscreenControl
+                    });
+
+                    if (gmConfig.calculateAndDisplayRouteEnabled && gmConfig.markerData.length > 1) {
+                        validateRouteTravelMode();
+                        directionsService = new google.maps.DirectionsService;
+                        directionsDisplay = new google.maps.DirectionsRenderer;
+                        directionsDisplay.setMap(map);
+                    }
+                }
+            };
+
+            var validateMapTypeIds = function() {
+                var allowedMapTypeIds = ['roadmap', 'satellite', 'hybrid', 'terrain'];
+                var incompatibleMapTypeIds = gmConfig.mapMapTypeIds.filter(function(item) {
+                    return allowedMapTypeIds.indexOf(item) === -1;
+                }).sort();
+                for (var i = 0; i < incompatibleMapTypeIds.length; i++) {
+                    gmConfig.mapMapTypeIds.splice(gmConfig.mapMapTypeIds.indexOf(incompatibleMapTypeIds[i]), 1);
+                }
+                if (!gmConfig.mapMapTypeIds.length) {
+                    gmConfig.mapMapTypeIds = ['roadmap', 'satellite'];
+                }
+            };
+
+            var validateRouteTravelMode = function() {
+                var allowedRouteTravelModes = ['DRIVING', 'WALKING', 'BICYCLING'];
+                if (allowedRouteTravelModes.indexOf(gmConfig.routeTravelMode) === -1) {
+                    routeTravelMode = 'DRIVING';
+                }
+            };
+
+            var sendToComponent = function (message) {
+                console.log('message',message);
+                parent.postMessage(message, '*');
+            };
+        </script>
+    </body>
+</html>
+</apex:page>
